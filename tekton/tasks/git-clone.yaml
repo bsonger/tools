@@ -1,0 +1,36 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: git-clone
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: url
+      type: string
+    - name: revision
+      type: string
+      default: main
+  workspaces:
+    - name: output
+  results:
+    - name: commit
+      description: git commit SHA
+  steps:
+    - name: clone
+      image: bitnami/git:latest
+      imagePullPolicy: IfNotPresent
+      script: |
+        #!/bin/sh
+        set -e
+        rm -rf $(workspaces.output.path)/.*
+        rm -rf $(workspaces.output.path)/* 
+        git clone $(params.url) --branch $(params.revision) --depth 1 $(workspaces.output.path)
+        cd $(workspaces.output.path)
+        git rev-parse HEAD | tee $(results.commit.path)
+      env:
+        - name: HTTP_PROXY
+          value: http://192.168.1.2:7890
+        - name: HTTPS_PROXY
+          value: http://192.168.1.2:7890
+        - name: NO_PROXY
+          value: localhost,127.0.0.1,.svc,.cluster.local

@@ -1,0 +1,28 @@
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  # 给你的 TaskRun 起一个名字
+  name: build-push-manifest-run-example
+  # 确保命名空间和 Task 一致
+  namespace: tekton-pipelines
+spec:
+  # 指定要运行的 Task 名称
+  taskRef:
+    name: build-push-manifest
+  # 为 Task 提供参数
+  params:
+    - name: name
+      value: "my-app"  # 替换成你的项目名称
+    - name: manifest-name
+      value: "backend-service" # 替换成你的 manifests 名称
+    - name: tag
+      value: v1
+  # 为 Task 提供工作空间
+  workspaces:
+    - name: source
+      # 这里使用一个临时的空目录作为工作空间
+      # 在实际场景中，你可能会使用 PVC 或 ConfigMap
+      emptyDir: {}
+    - name: ssh
+      secret:
+        secretName: git-ssh-secret

@@ -1,0 +1,60 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: devflow-ci
+  namespace: tekton-pipelines
+spec:
+  params:
+    - {name: git-url,        type: string}
+    - {name: git-revision,   type: string,  default: main}
+    - {name: image-registry, type: string}
+    - {name: name,           type: string}
+    - {name: image-tag,      type: string,  default: latest}
+    - {name: DOCKERFILE,      type: string,  default: Dockerfile}
+    - name: manifest-name
+      type: string
+  workspaces:
+    - {name: source}
+    - {name: dockerconfig}
+    - name: ssh
+  tasks:
+    - name: clone
+      taskRef: {name: git-clone}
+      params:
+        - {name: url,      value: $(params.git-url)}
+        - {name: revision, value: $(params.git-revision)}
+      workspaces:
+        - {name: output, workspace: source}
+
+    - name: buildah-build-push
+      runAfter: [clone]
+      taskRef: {name: buildah-build-push}
+      params:
+        - name: IMAGE
+          value: $(params.image-registry)/$(params.name):$(params.image-tag)
+        - name: DOCKERFILE
+          value: $(params.DOCKERFILE)
+      workspaces:
+        - {name: source,       workspace: source}
+        - {name: dockerconfig, workspace: dockerconfig}
+#    - name: build-push-manifest
+#      runAfter: [buildah-build-push]
+#      taskRef:
+#        name: build-push-manifest
+#      params:
+#        - name: name
+#          value: $(params.name)
+#        - name: manifest-name
+#          value: $(params.manifest-name)
+#        - name: tag
+#          value: $(params.image-tag)
+#      workspaces:
+#        - name: source
+#          workspace: source
+#        - name: ssh
+#          workspace: ssh
+  finally:
+    - name: notify
+      taskRef: {name: notify}
+      params:
+        - {name: message, value: "🎉 Pipeline $(context.pipelineRun.name) finished."}

@@ -1,0 +1,96 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: build-push-manifest
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: name
+      type: string
+    - name: manifest-name
+      type: string
+    - name: tag
+      type: string
+  workspaces:
+    - name: source   # 源代码/配置
+    - name: ssh      # SSH Key
+  steps:
+    - name: clone-and-render
+      image: registry.cn-hangzhou.aliyuncs.com/devflow/git-template:v1
+      imagePullPolicy: Always
+      env:
+        - name: APP_NAME
+          value: $(params.name)
+        - name: MANIFEST_NAME
+          value: $(params.manifest-name)
+        - name: TAG
+          value: $(params.tag)
+        - name: HTTP_PROXY
+          value: http://192.168.1.2:7890
+        - name: HTTPS_PROXY
+          value: http://192.168.1.2:7890
+        - name: NO_PROXY
+          value: localhost,127.0.0.1,.svc,.cluster.local
+      script: |
+        #!/bin/sh
+        set -e
+
+        echo "=== Configure SSH Key for Git ==="
+        mkdir -p ~/.ssh
+        cp /workspace/ssh/ssh-privatekey ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+
+        # Disable strict host checking
+        cat <<EOF > ~/.ssh/config
+        Host github.com
+          StrictHostKeyChecking no
+        EOF
+
+        ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+        git config --global user.email "tekton@example.com"
+        git config --global user.name "Tekton CI/CD"
+
+        echo "=== Start clone manifests ==="
+        git clone git@github.com:bsonger/manifests.git --depth 1
+        echo "=== Clone finished ==="
+
+        DIR_PATH="manifests/${APP_NAME}/${MANIFEST_NAME}"
+        echo "manifest 目录 $DIR_PATH"
+
+        if [ -d "$DIR_PATH" ]; then
+            echo "目录 $DIR_PATH 存在，正在删除..."
+            rm -rf "$DIR_PATH"
+            echo "目录 $DIR_PATH 已删除"
+        else
+            echo "目录 $DIR_PATH 不存在，无需删除"
+        fi
+
+        mkdir -p "${DIR_PATH}/base"
+        mkdir -p "${DIR_PATH}/overlays/dev"
+        mkdir -p "${DIR_PATH}/overlays/prod"
+
+        echo "=== Render base templates ==="
+        for f in manifests/template/base/*.tpl; do
+          envsubst < "$f" > "${DIR_PATH}/base/$(basename $f .tpl)"
+        done
+        
+        echo "=== Render dev overlays ==="
+        for f in manifests/template/overlays/dev/*.tpl; do
+          envsubst < "$f" > "${DIR_PATH}/overlays/dev/$(basename $f .tpl)"
+        done
+
+        echo "=== Render prod overlays ==="
+        for f in manifests/template/overlays/prod/*.tpl; do
+          envsubst < "$f" > "${DIR_PATH}/overlays/prod/$(basename $f .tpl)"
+        done
+
+        echo "=== Copy config files from workspace ==="
+        cp $(workspaces.source.path)/config/dev/config.yaml "${DIR_PATH}/overlays/dev/config.yaml"
+        cp $(workspaces.source.path)/config/prod/config.yaml "${DIR_PATH}/overlays/prod/config.yaml"
+        ls -lh "${DIR_PATH}/overlays/dev/config.yaml"
+        echo "=== Git commit & push manifests ==="
+        cd manifests
+        git add .
+        git commit -m "Update manifests for ${APP_NAME} ${TAG}" || true
+        git push

@@ -1,0 +1,58 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: buildah-build-push
+  namespace: tekton-pipelines
+spec:
+  description: 使用 Buildah 构建并推送镜像到 Harbor（使用 harbor-auth secret）
+  params:
+    - name: IMAGE
+      description: 目标镜像（例如 registry.cn-hangzhou.aliyuncs.com/project/image:tag）
+      type: string
+    - name: DOCKERFILE
+      description: Dockerfile 文件名（默认：Dockerfile）
+      type: string
+      default: Dockerfile
+    - name: CONTEXT
+      description: Build context 路径（默认：.）
+      type: string
+      default: .
+  workspaces:
+    - name: source
+      description: 源代码目录（包含 Dockerfile）
+    - name: dockerconfig
+      description: Harbor 登录 Secret（应为包含 config.json 的 Secret）
+      mountPath: /kaniko/.docker/   # Tekton 自动挂载这个 workspace 到该路径
+  steps:
+    - name: check-docker-config
+      image: alpine
+      imagePullPolicy: IfNotPresent
+      script: |
+        echo "🔍 /kaniko/.docker 目录内容:"
+        ls -al /kaniko/.docker
+        echo "📄 .dockerconfigjson 内容:"
+        cat /kaniko/.docker/.dockerconfigjson || echo "❌ .dockerconfigjson 不存在"
+        ls -lh $(workspaces.source.path)
+
+    - name: build
+      image: quay.io/buildah/stable:latest
+      imagePullPolicy: IfNotPresent
+      securityContext:
+        privileged: true
+      env:
+        - name: REGISTRY_AUTH_FILE
+          value: /kaniko/.docker/.dockerconfigjson  # Buildah 读取这个文件进行认证
+        - name: HTTP_PROXY
+          value: http://192.168.1.2:7890
+        - name: HTTPS_PROXY
+          value: http://192.168.1.2:7890
+        - name: NO_PROXY
+          value: localhost,127.0.0.1,.svc,.cluster.local
+      script: |
+        #!/bin/sh
+        set -e
+        echo "🔧 构建镜像: $(params.IMAGE)"
+        buildah bud --pull=missing -f $(workspaces.source.path)/$(params.DOCKERFILE) \
+                    -t $(params.IMAGE) \
+                    $(workspaces.source.path)
+        buildah push $(params.IMAGE)
