@@ -37,22 +37,6 @@ spec:
       workspaces:
         - {name: source,       workspace: source}
         - {name: dockerconfig, workspace: dockerconfig}
-#    - name: build-push-manifest
-#      runAfter: [buildah-build-push]
-#      taskRef:
-#        name: build-push-manifest
-#      params:
-#        - name: name
-#          value: $(params.name)
-#        - name: manifest-name
-#          value: $(params.manifest-name)
-#        - name: tag
-#          value: $(params.image-tag)
-#      workspaces:
-#        - name: source
-#          workspace: source
-#        - name: ssh
-#          workspace: ssh
   finally:
     - name: notify
       taskRef: {name: notify}
