@@ -1,0 +1,94 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: devflow-ci
+  namespace: tekton-pipelines
+spec:
+  finally:
+  - name: notify
+    params:
+    - name: message
+      value: "\U0001F389 Pipeline $(context.pipelineRun.name) finished."
+    taskRef:
+      kind: Task
+      name: notify
+  params:
+  - name: manifest-id
+    type: string
+  - name: git-url
+    type: string
+  - default: main
+    name: git-revision
+    type: string
+  - name: image-registry
+    type: string
+  - name: name
+    type: string
+  - default: latest
+    name: image-tag
+    type: string
+  - default: Dockerfile
+    name: DOCKERFILE
+    type: string
+  - name: manifest-name
+    type: string
+  tasks:
+  - name: clone
+    params:
+    - name: url
+      value: $(params.git-url)
+    - name: revision
+      value: $(params.git-revision)
+    taskRef:
+      kind: Task
+      name: git-clone-ssh
+    workspaces:
+    - name: output
+      workspace: source
+    - name: ssh
+      workspace: ssh
+  - name: build-image
+    params:
+    - name: IMAGE
+      value: $(params.image-registry)/$(params.name):$(params.image-tag)
+    - name: DOCKERFILE
+      value: $(params.DOCKERFILE)
+    runAfter:
+    - clone
+    taskRef:
+      kind: Task
+      name: build-and-push-image
+    workspaces:
+    - name: source
+      workspace: source
+    - name: dockerconfig
+      workspace: dockerconfig
+  - name: patch-manifest
+    params:
+    - name: manifest-id
+      value: $(params.manifest-id)
+    - name: commit-hash
+      value: $(tasks.clone.results.commit)
+    - name: image-digest
+      value: $(tasks.build-image.results.IMAGE_DIGEST)
+    runAfter:
+    - build-image
+    taskRef:
+      kind: Task
+      name: devflow-patch
+  - name: trivy-scan
+    params:
+    - name: IMAGE
+      value: $(params.image-registry)/$(params.name):$(params.image-tag)
+    runAfter:
+    - build-image
+    taskRef:
+      kind: Task
+      name: trivy-scan
+    workspaces:
+    - name: dockerconfig
+      workspace: dockerconfig
+  workspaces:
+  - name: source
+  - name: dockerconfig
+  - name: ssh
