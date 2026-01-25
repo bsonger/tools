@@ -1,0 +1,28 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: generate-sbom
+  namespace: tekton-pipelines
+spec:
+  params:
+  - name: IMAGE
+    type: string
+  steps:
+  - computeResources: {}
+    env:
+    - name: HTTP_PROXY
+      value: http://192.168.1.2:7890
+    - name: HTTPS_PROXY
+      value: http://192.168.1.2:7890
+    - name: NO_PROXY
+      value: localhost,127.0.0.1,.svc,.cluster.local
+    - name: REGISTRY_AUTH_FILE
+      value: /.docker/.dockerconfigjson
+    image: registry.cn-hangzhou.aliyuncs.com/devflow/ubuntu:v1
+    name: sbom
+    script: "set -e\nmkdir -p $(workspaces.source.path)/sbom\necho \"\U0001F9FE Generating
+      SBOM from image $(params.IMAGE)\"\nsyft $(params.IMAGE) \\\n-o attestationspdx-json=$(workspaces.source.path)/sbom/sbom.attestation.json\n"
+  workspaces:
+  - name: source
+  - mountPath: /.docker/
+    name: dockerconfig

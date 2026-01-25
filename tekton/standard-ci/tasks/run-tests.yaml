@@ -1,0 +1,24 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: run-tests
+  namespace: tekton-pipelines
+spec:
+  steps:
+  - computeResources: {}
+    env:
+    - name: HTTP_PROXY
+      value: http://192.168.1.2:7890
+    - name: HTTPS_PROXY
+      value: http://192.168.1.2:7890
+    - name: NO_PROXY
+      value: localhost,127.0.0.1,.svc,.cluster.local
+    image: registry.cn-hangzhou.aliyuncs.com/devflow/golang:1.25.6
+    name: test
+    script: |
+      set -e
+      cd $(workspaces.source.path)
+      go mod tidy
+      go test ./...
+  workspaces:
+  - name: source

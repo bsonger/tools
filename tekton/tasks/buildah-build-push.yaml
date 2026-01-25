@@ -56,3 +56,11 @@ spec:
                     -t $(params.IMAGE) \
                     $(workspaces.source.path)
         buildah push $(params.IMAGE)
+        # 获取镜像 digest
+        buildah push \
+        --digestfile /tmp/digest \
+        ${IMAGE} \
+        docker://${IMAGE}
+
+        DIGEST=$(cat /tmp/digest)
+        echo "✅ Image digest: ${DIGEST}"

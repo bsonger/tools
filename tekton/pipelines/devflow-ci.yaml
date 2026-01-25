@@ -5,6 +5,8 @@ metadata:
   namespace: tekton-pipelines
 spec:
   params:
+    - name: manifest-id
+      type: string
     - {name: git-url,        type: string}
     - {name: git-revision,   type: string,  default: main}
     - {name: image-registry, type: string}
@@ -19,16 +21,18 @@ spec:
     - name: ssh
   tasks:
     - name: clone
-      taskRef: {name: git-clone}
+      taskRef: {name: git-clone-ssh}
       params:
         - {name: url,      value: $(params.git-url)}
         - {name: revision, value: $(params.git-revision)}
       workspaces:
         - {name: output, workspace: source}
+        - name: ssh
+          workspace: ssh
 
-    - name: buildah-build-push
+    - name: build-image
       runAfter: [clone]
-      taskRef: {name: buildah-build-push}
+      taskRef: {name: build-and-push-image}
       params:
         - name: IMAGE
           value: $(params.image-registry)/$(params.name):$(params.image-tag)
@@ -37,6 +41,32 @@ spec:
       workspaces:
         - {name: source,       workspace: source}
         - {name: dockerconfig, workspace: dockerconfig}
+
+    - name: patch-manifest
+      runAfter: ["build-image"]
+      taskRef:
+        name: devflow-patch
+      params:
+        - name: manifest-id
+          value: $(params.manifest-id)
+
+        - name: commit-hash
+          value: $(tasks.clone.results.commit)
+
+        - name: image-digest
+          value: $(tasks.build-image.results.IMAGE_DIGEST)
+
+    - name: trivy-scan
+      runAfter:
+        - build-image
+      taskRef:
+        name: trivy-scan
+      params:
+        - name: IMAGE
+          value: $(params.image-registry)/$(params.name):$(params.image-tag)
+      workspaces:
+        - name: dockerconfig
+          workspace: dockerconfig
   finally:
     - name: notify
       taskRef: {name: notify}

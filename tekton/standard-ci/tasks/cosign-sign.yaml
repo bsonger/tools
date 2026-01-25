@@ -1,0 +1,38 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: cosign-sign
+  namespace: tekton-pipelines
+spec:
+  params:
+  - name: IMAGE
+    type: string
+  - name: DIGEST
+    type: string
+  steps:
+  - computeResources: {}
+    env:
+    - name: COSIGN_PASSWORD
+      value: "123456"
+    - name: DOCKER_CONFIG
+      value: /.docker/
+    image: registry.cn-hangzhou.aliyuncs.com/devflow/ubuntu:v1
+    name: sign
+    script: |
+      set -euo pipefail
+
+      IMAGE="$(params.IMAGE)"
+      DIGEST="$(params.DIGEST)"
+      KEY="$(workspaces.cosign-key.path)/cosign.key"
+
+      echo "✍️ Signing image ${IMAGE}@${DIGEST}"
+      cosign sign \
+        --key "${KEY}" \
+        --yes \
+        "${IMAGE}@${DIGEST}"
+
+      echo "✅ Image signed successfully"
+  workspaces:
+  - mountPath: /.docker/
+    name: dockerconfig
+  - name: cosign-key

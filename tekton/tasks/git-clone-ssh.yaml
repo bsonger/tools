@@ -1,0 +1,31 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: git-clone-ssh
+  namespace: tekton-pipelines
+spec:
+  params:
+    - name: url
+      type: string
+    - name: revision
+      type: string
+      default: main
+  workspaces:
+    - name: output
+    - name: ssh
+  results:
+    - description: git commit SHA
+      name: commit
+      type: string
+  steps:
+    - name: clone
+      image: mcp/git:latest
+      script: |
+        mkdir -p ~/.ssh
+        cp $(workspaces.ssh.path)/id_rsa ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan github.com >> ~/.ssh/known_hosts
+        git clone $(params.url) $(workspaces.output.path)
+        cd $(workspaces.output.path)
+        git checkout $(params.revision)
+        git rev-parse HEAD | tee $(results.commit.path)

@@ -1,0 +1,41 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: build-and-push-image
+  namespace: tekton-pipelines
+spec:
+  params:
+  - name: IMAGE
+    type: string
+  - default: Dockerfile
+    name: DOCKERFILE
+    type: string
+  results:
+  - name: IMAGE_DIGEST
+    type: string
+  steps:
+  - computeResources: {}
+    env:
+    - name: HTTP_PROXY
+      value: http://192.168.1.2:7890
+    - name: HTTPS_PROXY
+      value: http://192.168.1.2:7890
+    - name: NO_PROXY
+      value: localhost,127.0.0.1,.svc,.cluster.local
+    - name: REGISTRY_AUTH_FILE
+      value: /.docker/.dockerconfigjson
+    image: quay.io/buildah/stable:latest
+    imagePullPolicy: IfNotPresent
+    name: build-push
+    script: "set -e\nIMAGE=\"$(params.IMAGE)\"\nSRC=\"$(workspaces.source.path)\"\n\necho
+      \"\U0001F527 Build image ${IMAGE}\"\nbuildah bud -f ${SRC}/$(params.DOCKERFILE)
+      -t ${IMAGE} ${SRC}\n\necho \"\U0001F680 Push image to registry\"\nbuildah push
+      ${IMAGE} docker://${IMAGE}\n\n# 获取镜像 digest\nbuildah push \\\n--digestfile /tmp/digest
+      \\\n${IMAGE} \\\ndocker://${IMAGE}\n\nDIGEST=$(cat /tmp/digest)\necho \"✅ Image
+      digest: ${DIGEST}\"\necho -n \"${DIGEST}\" > $(results.IMAGE_DIGEST.path)\n"
+    securityContext:
+      privileged: true
+  workspaces:
+  - name: source
+  - mountPath: /.docker/
+    name: dockerconfig

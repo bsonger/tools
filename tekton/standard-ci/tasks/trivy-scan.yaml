@@ -1,0 +1,27 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: trivy-scan
+  namespace: tekton-pipelines
+spec:
+  params:
+  - name: IMAGE
+    type: string
+  steps:
+  - computeResources: {}
+    env:
+    - name: HTTP_PROXY
+      value: http://192.168.1.2:7890
+    - name: HTTPS_PROXY
+      value: http://192.168.1.2:7890
+    - name: NO_PROXY
+      value: localhost,127.0.0.1,.svc,.cluster.local
+    - name: REGISTRY_AUTH_FILE
+      value: /.docker/.dockerconfigjson
+    image: registry.cn-hangzhou.aliyuncs.com/devflow/ubuntu:v1
+    name: scan
+    script: "set -e\necho \"\U0001F50D Trivy scan registry image $(params.IMAGE)\"\ntrivy
+      image --severity CRITICAL,HIGH --exit-code 1 $(params.IMAGE)\n"
+  workspaces:
+  - mountPath: /.docker/
+    name: dockerconfig
